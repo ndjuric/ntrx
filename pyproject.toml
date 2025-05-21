@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ntrx"
+version = "0.1.0"
+description = "NTRIP caster reimplementation"
+authors = [{ name="ndjuric", email="metod303@gmail.com" }]
+dependencies = ["redis", "python-dotenv"]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[project.scripts]
+ntrx = "ntrx.__main__:main"
