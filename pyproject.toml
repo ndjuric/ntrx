@@ -16,4 +16,4 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [project.scripts]
-ntrx = "ntrx.__main__:main"
+ntrx = "ntrx.__main__:app"
