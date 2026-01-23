@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from contextlib import asynccontextmanager
 import asyncio
 import json
@@ -21,6 +21,7 @@ class FastAPIServer:
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI):
+        # ... (keep existing)
         redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
         redis_password = os.getenv("REDIS_PASSWORD", "")
         if redis_password:
@@ -39,6 +40,7 @@ class FastAPIServer:
     def setup_routes(self) -> None:
         @self.app.get("/state")
         async def get_state():
+             # ...
             try:
                 state = await self.app.state.redis_client.get('ntripcaster_state')
                 if state:
@@ -48,19 +50,20 @@ class FastAPIServer:
                 self.logger.error(f"GET /state error: {e}")
                 return {"error": "Internal server error"}
 
-        @self.app.websocket("/ws")
-        async def websocket_endpoint(websocket: WebSocket):
-            await websocket.accept()
+        @self.app.post("/api/kill/{username}")
+        async def kill_user(username: str):
             try:
-                while True:
-                    state = await self.app.state.redis_client.get('ntripcaster_state')
-                    if state:
-                        await websocket.send_text(json.dumps(json.loads(state), indent=4))
-                    await asyncio.sleep(1)
-            except WebSocketDisconnect:
-                self.logger.info("WebSocket client disconnected")
+                if not self.app.state.redis_client:
+                    raise HTTPException(status_code=503, detail="Redis unavailable")
+                
+                message = json.dumps({"action": "kill", "username": username})
+                await self.app.state.redis_client.publish("ntrip:control", message)
+                return {"status": "ok", "message": f"Kill signal sent for {username}"}
             except Exception as e:
-                self.logger.error(f"WebSocket error: {e}")
+                self.logger.error(f"Kill API error: {e}")
+                raise HTTPException(status_code=500, detail="Internal Error")
+
+# ... (keep debug/routes if useful, but maybe remove print)
 
     def run(self) -> None:
         try:

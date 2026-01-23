@@ -8,7 +8,7 @@ from ntrx.logger.logger_setup import LoggerSetup
 
 class Agent:
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
-                 mountpoint: str, agent_type: str, real_ip: Optional[str] = None):
+                 mountpoint: str, agent_type: str, real_ip: Optional[str] = None, username: Optional[str] = None):
         self.reader = reader
         self.writer = writer
         self.mountpoint = mountpoint
@@ -20,6 +20,7 @@ class Agent:
         self.last_activity = time.time()
         self.peer = writer.get_extra_info("peername")
         self.real_ip = real_ip or self.peer[0]
+        self.username = username
         self._caster = None
         self.logger = LoggerSetup.get_logger(__name__)
 

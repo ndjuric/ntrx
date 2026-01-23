@@ -100,6 +100,90 @@ class NtripCaster:
             await agent.writer.wait_closed()
             await self.publish_state()
 
+    def get_source_table_data(self) -> bytes:
+        """Generates the NTRIP source table based on connected sources."""
+        # Header
+        # Format: STR;Mountpoint;Identifier;Format;Format-Details;Carrier;Nav-System;Network;Country;Latitude;Longitude;NMEA;Solution;Generator;Compr-Encr;Authentication;Fee;Bitrate;Misc
+        # We will use a simplified format matching standard casters or the C implementation logic
+        # Default C implementation: STR;mountpoint;mountpoint;RTCM3X;1005(10),1074-1084-1124(1);2;GNSS;NET;CHN;0.00;0.00;1;1;None;None;B;N;0;
+        
+        lines = []
+        for mount, agent in self.sources.items():
+            # For parity with C implementation which often hardcodes these values or derives minimal info
+            # We will try to use real data if available, but default to C-like string for compatibility
+            line = (f"STR;{mount};{mount};RTCM 3.X;1005(10),1074-1084-1124(1);2;GNSS;NET;UNK;"
+                    f"0.00;0.00;1;1;NtripCaster;None;B;N;{agent.in_bps};")
+            lines.append(line)
+        
+        body = "\r\n".join(lines) + "\r\nENDSOURCETABLE\r\n"
+        return body.encode("utf-8")
+
+    async def start_control_listener(self) -> None:
+        """
+        Listens to Redis 'ntrip:control' channel for administrative commands.
+        Example: {"action": "kill", "username": "user1"}
+        """
+        if not self.redis:
+            self.logger.warning("Redis is not connected, control listener cannot start.")
+            return
+
+        pubsub = self.redis.pubsub()
+        await pubsub.subscribe("ntrip:control")
+        self.logger.info("Subscribed to Redis channel 'ntrip:control'")
+
+        try:
+            async for message in pubsub.listen():
+                if message["type"] != "message":
+                    continue
+                
+                try:
+                    data = json.loads(message["data"])
+                    action = data.get("action")
+                    if action == "kill":
+                        target_user = data.get("username")
+                        if target_user:
+                            self.logger.info(f"Received kill command for user: {target_user}")
+                            await self._kill_user(target_user)
+                except json.JSONDecodeError:
+                    self.logger.error(f"Invalid JSON in control message: {message['data']}")
+                except Exception as e:
+                    self.logger.error(f"Error processing control message: {e}")
+        except Exception as e:
+            self.logger.error(f"Control listener error: {e}")
+        finally:
+            await pubsub.close()
+
+    async def _kill_user(self, username: str) -> None:
+        """Disconnects all clients with the specified username."""
+        killed_count = 0
+        for mountpoint, agents in list(self.clients.items()):
+            for agent in list(agents):
+                if getattr(agent, "username", "") == username:
+                    self.logger.warning(f"Force closing agent {username} on {mountpoint}")
+                    try:
+                        agent.writer.close()
+                    except Exception as e:
+                        self.logger.error(f"Error closing socket for {username}: {e}")
+                    killed_count += 1
+        
+        if killed_count == 0:
+            self.logger.debug(f"No active clients found for user {username} to kill.")
+
+    async def _publish_client_position(self, username: str, line: bytes) -> None:
+        """Publishes the client's GPGGA position to Redis for real-time tracking."""
+        if not self.redis:
+            return
+
+        try:
+            message = {
+                "username": username,
+                "nmea": line.decode("utf-8", errors="replace"),
+                "timestamp": time.time()
+            }
+            await self.redis.publish("ntrip:positions", json.dumps(message))
+        except Exception as e:
+            self.logger.error(f"Failed to publish position for {username}: {e}")
+
     async def handle_client_conn(self, agent: Agent) -> None:
         agent.set_caster(self)
         self.logger.info(f"client connected: {agent.mountpoint} from {agent.real_ip}")
@@ -109,19 +193,37 @@ class NtripCaster:
                 data = await agent.reader.read(1024)
                 if not data:
                     break
+                
+                # NMEA Parsing for Map/Tracking
+                # C implementation checks for $GPGGA or $GNGGA
+                if b"$GPGGA" in data or b"$GNGGA" in data:
+                    # We assume the data chunk contains the line. 
+                    # For a robust implementation, we should buffer lines, but for C-parity:
+                    lines = data.split(b'\n')
+                    for line in lines:
+                        if b"$GPGGA" in line or b"$GNGGA" in line:
+                            # Extract user from agent (we need to pass username to Agent or store it)
+                            if hasattr(agent, "username") and agent.username:
+                                await self._publish_client_position(agent.username, line.strip())
+
                 agent.in_bytes += len(data)
                 agent.in_bps = len(data) * 8
                 await agent.update_activity()
                 if agent.mountpoint in self.sources:
                     source = self.sources[agent.mountpoint]
-                    source.writer.write(data)
-                    await source.writer.drain()
+                    try:
+                        source.writer.write(data)
+                        await source.writer.drain()
+                    except Exception:
+                         # Source might be dead
+                         pass
         except Exception as e:
             self.logger.error(f"Client loop error: {e}")
         finally:
             self.logger.info(f"client disconnected: {agent.mountpoint}")
             if agent.mountpoint in self.clients and agent in self.clients[agent.mountpoint]:
                 self.clients[agent.mountpoint].remove(agent)
+            
             agent.writer.close()
             await agent.writer.wait_closed()
             await self.publish_state()
@@ -145,16 +247,17 @@ class NtripCaster:
                     await writer.drain()
                     writer.close()
                     return
-                _, mountpoint, password = parts[:3]
-                if not self.authenticate_source(password, mountpoint):
+                # _, password_val, mountpoint_val = parts[:3]
+                _, password_val, mountpoint_val = parts[:3]
+                if not self.authenticate_source(password_val, mountpoint_val):
                     writer.write(b"HTTP/1.0 403 Forbidden\r\n\r\n")
                     await writer.drain()
                     writer.close()
-                    self.logger.warning(f"source auth failed: {real_ip} mountpoint={mountpoint}")
+                    self.logger.warning(f"source auth failed: {real_ip} mountpoint={mountpoint_val}")
                     return
-                agent = Agent(reader, writer, mountpoint, "source", real_ip)
+                agent = Agent(reader, writer, mountpoint_val, "source", real_ip)
                 agent.set_caster(self)
-                self.sources[mountpoint] = agent
+                self.sources[mountpoint_val] = agent
                 writer.write(b"HTTP/1.0 200 OK\r\n\r\n")
                 await writer.drain()
                 await self.handle_source(agent)
@@ -166,7 +269,29 @@ class NtripCaster:
                     await writer.drain()
                     writer.close()
                     return
-                mountpoint = parts[1].lstrip("/")
+                
+                request_path = parts[1]
+                
+                # Check for Source Table request (GET /)
+                if request_path == "/" or request_path == "":
+                    source_table = self.get_source_table_data()
+                    now_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+                    
+                    header = (f"SOURCETABLE 200 OK\r\n"
+                              f"Server: NtripCaster/Py/0.1\r\n"
+                              f"Date: {now_str}\r\n"
+                              f"Content-Type: text/plain\r\n"
+                              f"Content-Length: {len(source_table)}\r\n"
+                              f"Connection: close\r\n\r\n")
+                    
+                    writer.write(header.encode("utf-8") + source_table)
+                    await writer.drain()
+                    # C implementation delays close to ensure send complete, in asyncio drain() handles this
+                    writer.close()
+                    await writer.wait_closed()
+                    return
+
+                mountpoint = request_path.lstrip("/")
                 headers = {}
                 while True:
                     line = await reader.readline()
@@ -176,13 +301,27 @@ class NtripCaster:
                     if ":" in line_str:
                         key, val = line_str.split(":", 1)
                         headers[key.lower()] = val.strip()
+                        
+                # Authenticate
+                username = ""
+                if "authorization" in headers:
+                     auth_header = headers["authorization"]
+                     if auth_header.startswith("Basic "):
+                         try:
+                             decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                             if ":" in decoded:
+                                 username, _ = decoded.split(":", 1)
+                         except:
+                             pass
+                                 
                 if "authorization" not in headers or not self.authenticate_client(headers["authorization"], mountpoint):
                     writer.write(b'HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Basic realm="NTRIP"\r\n\r\n')
                     await writer.drain()
                     writer.close()
                     self.logger.warning(f"client auth failed: {real_ip} mountpoint={mountpoint}")
                     return
-                agent = Agent(reader, writer, mountpoint, "client", real_ip)
+                    
+                agent = Agent(reader, writer, mountpoint, "client", real_ip, username=username)
                 agent.set_caster(self)
                 self.clients[mountpoint].append(agent)
                 writer.write(b"HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n")
@@ -212,6 +351,9 @@ class NtripCaster:
             server = await asyncio.start_server(self.handle_connection, listen_addr, listen_port)
             addr = server.sockets[0].getsockname()
             self.logger.info(f"NTRIP caster listening on {addr}")
+            
+            # Start Redis Control Listener
+            asyncio.create_task(self.start_control_listener())
 
             await self.publish_state()
             async with server:
