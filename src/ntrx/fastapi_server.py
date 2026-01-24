@@ -9,6 +9,8 @@ from redis.asyncio import Redis
 
 from ntrx.vfs.fs import FS
 from ntrx.logger.logger_setup import LoggerSetup
+from ntrx.models.caster_state import CasterState
+from ntrx.models.control import ControlCommand
 
 
 class FastAPIServer:
@@ -38,17 +40,17 @@ class FastAPIServer:
                 await self.redis.close()
 
     def setup_routes(self) -> None:
-        @self.app.get("/state")
+        @self.app.get("/state", response_model=CasterState)
         async def get_state():
-             # ...
             try:
-                state = await self.app.state.redis_client.get('ntripcaster_state')
-                if state:
-                    return json.loads(state)
-                return {"error": "State not available"}
+                state_json = await self.app.state.redis_client.get('ntripcaster_state')
+                if state_json:
+                    # Validate and return object
+                    return CasterState.model_validate_json(state_json)
+                raise HTTPException(status_code=404, detail="State not available")
             except Exception as e:
                 self.logger.error(f"GET /state error: {e}")
-                return {"error": "Internal server error"}
+                raise HTTPException(status_code=500, detail="Internal server error")
 
         @self.app.post("/api/kill/{username}")
         async def kill_user(username: str):
@@ -56,8 +58,8 @@ class FastAPIServer:
                 if not self.app.state.redis_client:
                     raise HTTPException(status_code=503, detail="Redis unavailable")
                 
-                message = json.dumps({"action": "kill", "username": username})
-                await self.app.state.redis_client.publish("ntrip:control", message)
+                cmd = ControlCommand(action="kill", username=username)
+                await self.app.state.redis_client.publish("ntrip:control", cmd.model_dump_json())
                 return {"status": "ok", "message": f"Kill signal sent for {username}"}
             except Exception as e:
                 self.logger.error(f"Kill API error: {e}")

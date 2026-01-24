@@ -4,6 +4,7 @@ import asyncio
 from typing import Optional
 import time
 from ntrx.logger.logger_setup import LoggerSetup
+from ntrx.models.agent_data import AgentData
 
 
 class Agent:
@@ -35,17 +36,15 @@ class Agent:
             except Exception as e:
                 self.logger.error(f"Failed to publish state update: {e}")
 
-    def to_dict(self) -> dict:
-        current_time = time.time()
-        return {
-            'mountpoint': self.mountpoint,
-            'agent_type': self.agent_type,
-            'in_bytes': self.in_bytes,
-            'out_bytes': self.out_bytes,
-            'in_bps': self.in_bps,
-            'out_bps': self.out_bps,
-            'last_activity': self.last_activity,
-            'peer': self.peer,
-            'real_ip': self.real_ip,
-            'seconds_since_last_activity': round(current_time - self.last_activity, 2)
-        }
+    def to_data(self) -> AgentData:
+        return AgentData(
+            mountpoint=self.mountpoint,
+            real_ip=self.real_ip,
+            user_agent="Unknown", # Agent class doesn't track this yet, could add
+            connected_at=self.last_activity, # Using last_activity as proxy or add connected_time
+            bytes_in=self.in_bytes,
+            bytes_out=self.out_bytes,
+            bps_in=self.in_bps,
+            bps_out=self.out_bps,
+            username=self.username
+        )

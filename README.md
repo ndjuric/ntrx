@@ -1,145 +1,112 @@
 # ntrx 🛰️ – RTK Correction Data Dissemination
 
 Welcome to **ntrx**!  
-A modern, Python-powered NTRIP caster with a built-in API and WebSocket server for real-time GNSS correction data sharing.
+A high-performance, asynchronous, Redis-native NTRIP caster written in Python using FastAPI and `asyncio`.
 
 ---
 
-## 🚀 What is ntrx?
+## 🚀 Key Features
 
-**ntrx** is a next-generation NTRIP caster written in Python.  
-It streams GNSS correction data to clients and shares the latest state via a FastAPI-powered HTTP/WebSocket API.  
-**Redis** is used as a fast, in-memory message bus to synchronize state between the NTRIP caster and the API server.
-
----
-
-## 🧩 How does it work?
-
-- **NTRIP Caster**: Accepts connections from GNSS base stations (sources) and clients, relaying correction data.
-- **Redis**: Used to store and publish the current state (sources, clients, stats) in real time.
-- **API Server**: FastAPI app exposes `/state` (HTTP) and `/ws` (WebSocket) endpoints for monitoring, integration and even support.
-- **Clients**: Can connect via NTRIP, HTTP, or WebSocket to receive data or monitor the system.
-
-> **Note:**  
-> Redis is currently required for state sharing between the caster and API.  
-> _(TODO: Make Redis optional in a future release!)_
+- **Redis-Native Architecture**: Uses Redis Pub/Sub for Inter-Process Communication (IPC).
+  - **Live Position Streaming**: Client NMEA positions are streamed to Redis (`ntrip:positions`).
+  - **Kill Switch**: Admin control via Redis (`ntrip:control`) to actively disconnect users.
+- **Modern Python Implementation**:
+  - Built with **Python 3.12+**, **FastAPI**, and **AsyncIO**.
+  - **Strict Typing**: Uses **Pydantic** models for all data exchange and state management.
+  - **Clean Code**: Adheres to SOLID principles, low cyclomatic complexity, and class-based design.
+- **Scalable**: Stateless design allows horizontal scaling of API instances.
 
 ---
 
-## 🛠️ Features
+## 🧩 Architecture
 
-- 🌍 **Modern Python** (asyncio, FastAPI, Typer CLI)
-- 🔄 **Real-time state sharing** via Redis
-- 🛰️ **NTRIP Caster**: Handles multiple sources and clients
-- 📡 **API & WebSocket**: Live monitoring and integration
-- 📝 **Configurable** via `.env` and JSON config
-- 🪵 **Rotating, gzipped logs**
-- 🧪 **Test clients** for HTTP and WebSocket endpoints
+See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and schema information.
+
+- **NTRIP Caster**: Handles source/client connections, parses NMEA, and publishes events to Redis.
+- **FastAPI Server**: Provides a REST/WebSocket API for monitoring and control (Kill Switch).
+- **Redis**: Central message bus for `positions`, `control` commands, and shared `state`.
 
 ---
 
 ## ⚡ Quick Start
 
-### 1. Clone the repo
+### 1. Prerequisites
+
+- Python 3.12+
+- Redis Server (local or remote)
+
+### 2. Installation
 
 ```bash
 git clone https://github.com/ndjuric/ntrx.git
 cd ntrx
-```
-
-### 2. Install dependencies
-
-```bash
 python -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+pip install -e .  # Install in editable mode
 ```
 
-### 3. Configure your environment
+### 3. Configuration
 
-Copy and edit the `.env` file in the project root:
+Create a `.env` file in the project root:
 
 ```env
 REDIS_HOST=127.0.0.1
-REDIS_PASSWORD=your_redis_password
+REDIS_PASSWORD=changeme
 FASTAPI_HOST=0.0.0.0
 FASTAPI_PORT=8000
+LOG_MAX_SIZE_MB=10
+LOG_MAX_BACKUP_COUNT=5
 ```
 
-Edit `storage/ntripcaster.json` to set up your sources, tokens, etc.
+Edit `storage/ntripcaster.json` to define your Source and Client credentials.
 
-### 4. Start Redis
+### 4. Running the System
 
-You can use Docker or your system package manager:
+You need to run Redis, the Caster, and the API.
 
-```bash
-docker-compose up
-```
+**Option A: Individual Processes**
 
-### 5. Run the NTRIP caster or API server
+1. Start Redis: `docker-compose up -d`
+2. Start API: `python -m ntrx api`
+3. Start Caster: `python -m ntrx ntrip`
 
-#### Using the CLI:
-
-```bash
-python -m ntrx ntrip   # Start the NTRIP caster server
-python -m ntrx api     # Start the FastAPI WebSocket API server
-```
-
-#### Or with the interactive CLI:
-
-```bash
-python -m ntrx
-```
-
----
-
-## 🧑‍💻 CLI Usage
+**Option B: CLI Helper**
 
 ```bash
 python -m ntrx --help
 ```
 
-**Available ntrx subcommands:**
-
-- `ntrip` – Run the NTRIP caster server
-- `api` – Run the FastAPI WebSocket API server
-
 ---
 
 ## 📡 API Endpoints
 
-- `GET /state` – Get the current caster state (sources, clients, stats)
-- `WS /ws` – Live state updates via WebSocket
+- `GET /state` – Returns the current system state (connected sources/clients).
+- `POST /api/kill/{username}` – Disconnects a generic user (Source or Client) immediately.
+- `WS /ws` – Real-time state updates via WebSocket.
+- `GET /` & `GET /debug/routes` - Debug utilities.
 
 ---
 
-## 🧪 Test Clients
+## 🧪 Testing & Verification
 
-- `src/ntrx/test_http_api_endpoint.py` – Test the HTTP `/state` endpoint
-- `src/ntrx/test_ws_streaming.py` – Test the WebSocket `/ws` endpoint
+A robust integration test suite is included to verify the entire pipeline (Socket -> Caster -> Redis -> API).
 
----
-
-## 📝 TODO
-
-- [ ] Make Redis optional (allow direct API/caster communication)
-- [ ] Add more authentication options - look at more ntrip clients
-- [ ] Docker Compose setup for entire project (not just redis)
-- [ ] More test coverage
+```bash
+# Verify connection, streaming, and kill switch
+python src/ntrx/tests/integration_test.py
+```
 
 ---
 
 ## 🤝 Contributing
 
-PRs and issues are welcome!  
-Please open an issue or submit a pull request if you have suggestions or improvements.
+- Code must use **Pydantic** models for any data structure.
+- All IPC must go through **Redis**.
+- Cyclomatic complexity of methods must be kept under 10.
+- 100% adherence to **Class-Based** structure.
 
 ---
 
 ## 📄 License
 
 MIT License
-
----
-
-**Happy streaming! 🛰️**

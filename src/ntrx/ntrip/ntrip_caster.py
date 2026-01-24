@@ -14,6 +14,10 @@ from redis.asyncio import Redis
 from ntrx.vfs.fs import FS
 from ntrx.logger.logger_setup import LoggerSetup
 from ntrx.ntrip.agent import Agent
+from ntrx.models.position import ClientPosition
+from ntrx.models.control import ControlCommand
+from ntrx.models.caster_state import CasterState
+from ntrx.models.agent_data import AgentData
 
 
 class NtripCaster:
@@ -52,15 +56,14 @@ class NtripCaster:
         if self.redis:
             try:
                 state = self.get_state()
-                await self.redis.set('ntripcaster_state', json.dumps(state))
+                await self.redis.set('ntripcaster_state', state.model_dump_json())
             except Exception as e:
                 self.logger.error(f"Failed to publish state to Redis: {e}")
 
-    def get_state(self) -> dict:
-        return {
-            "sources": {m: a.to_dict() for m, a in self.sources.items()},
-            "clients": {m: [a.to_dict() for a in lst] for m, lst in self.clients.items()}
-        }
+    def get_state(self) -> CasterState:
+        source_data = {m: a.to_data() for m, a in self.sources.items()}
+        client_data = {m: [a.to_data() for a in lst] for m, lst in self.clients.items()}
+        return CasterState(sources=source_data, clients=client_data)
 
     async def handle_source(self, agent: Agent) -> None:
         agent.set_caster(self)
@@ -137,13 +140,19 @@ class NtripCaster:
                     continue
                 
                 try:
-                    data = json.loads(message["data"])
-                    action = data.get("action")
-                    if action == "kill":
-                        target_user = data.get("username")
-                        if target_user:
-                            self.logger.info(f"Received kill command for user: {target_user}")
-                            await self._kill_user(target_user)
+                    # Validate headers/structure with Pydantic
+                    # Redis pubsub message['data'] is str/bytes
+                    payload = message["data"]
+                    if isinstance(payload, bytes):
+                        payload = payload.decode()
+                    
+                    data = json.loads(payload)
+                    command = ControlCommand(**data) # Validate
+                    
+                    if command.action == "kill":
+                         self.logger.info(f"Received kill command for user: {command.username}")
+                         await self._kill_user(command.username)
+
                 except json.JSONDecodeError:
                     self.logger.error(f"Invalid JSON in control message: {message['data']}")
                 except Exception as e:
@@ -175,12 +184,12 @@ class NtripCaster:
             return
 
         try:
-            message = {
-                "username": username,
-                "nmea": line.decode("utf-8", errors="replace"),
-                "timestamp": time.time()
-            }
-            await self.redis.publish("ntrip:positions", json.dumps(message))
+            pos = ClientPosition(
+                username=username,
+                nmea=line.decode("utf-8", errors="replace"),
+                timestamp=time.time()
+            )
+            await self.redis.publish("ntrip:positions", pos.model_dump_json())
         except Exception as e:
             self.logger.error(f"Failed to publish position for {username}: {e}")
 
@@ -241,92 +250,9 @@ class NtripCaster:
             self.logger.info(f"handshake from {real_ip}: {first_line_str}")
 
             if first_line_str.upper().startswith("SOURCE"):
-                parts = first_line_str.split()
-                if len(parts) < 3:
-                    writer.write(b"HTTP/1.0 400 Bad Request\r\n\r\n")
-                    await writer.drain()
-                    writer.close()
-                    return
-                # _, password_val, mountpoint_val = parts[:3]
-                _, password_val, mountpoint_val = parts[:3]
-                if not self.authenticate_source(password_val, mountpoint_val):
-                    writer.write(b"HTTP/1.0 403 Forbidden\r\n\r\n")
-                    await writer.drain()
-                    writer.close()
-                    self.logger.warning(f"source auth failed: {real_ip} mountpoint={mountpoint_val}")
-                    return
-                agent = Agent(reader, writer, mountpoint_val, "source", real_ip)
-                agent.set_caster(self)
-                self.sources[mountpoint_val] = agent
-                writer.write(b"HTTP/1.0 200 OK\r\n\r\n")
-                await writer.drain()
-                await self.handle_source(agent)
-
+                await self._handle_source_handshake(reader, writer, first_line_str, real_ip)
             elif first_line_str.upper().startswith("GET"):
-                parts = first_line_str.split()
-                if len(parts) < 2:
-                    writer.write(b"HTTP/1.0 400 Bad Request\r\n\r\n")
-                    await writer.drain()
-                    writer.close()
-                    return
-                
-                request_path = parts[1]
-                
-                # Check for Source Table request (GET /)
-                if request_path == "/" or request_path == "":
-                    source_table = self.get_source_table_data()
-                    now_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
-                    
-                    header = (f"SOURCETABLE 200 OK\r\n"
-                              f"Server: NtripCaster/Py/0.1\r\n"
-                              f"Date: {now_str}\r\n"
-                              f"Content-Type: text/plain\r\n"
-                              f"Content-Length: {len(source_table)}\r\n"
-                              f"Connection: close\r\n\r\n")
-                    
-                    writer.write(header.encode("utf-8") + source_table)
-                    await writer.drain()
-                    # C implementation delays close to ensure send complete, in asyncio drain() handles this
-                    writer.close()
-                    await writer.wait_closed()
-                    return
-
-                mountpoint = request_path.lstrip("/")
-                headers = {}
-                while True:
-                    line = await reader.readline()
-                    if not line or line == b"\r\n":
-                        break
-                    line_str = line.decode("utf-8", errors="replace").strip()
-                    if ":" in line_str:
-                        key, val = line_str.split(":", 1)
-                        headers[key.lower()] = val.strip()
-                        
-                # Authenticate
-                username = ""
-                if "authorization" in headers:
-                     auth_header = headers["authorization"]
-                     if auth_header.startswith("Basic "):
-                         try:
-                             decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
-                             if ":" in decoded:
-                                 username, _ = decoded.split(":", 1)
-                         except:
-                             pass
-                                 
-                if "authorization" not in headers or not self.authenticate_client(headers["authorization"], mountpoint):
-                    writer.write(b'HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Basic realm="NTRIP"\r\n\r\n')
-                    await writer.drain()
-                    writer.close()
-                    self.logger.warning(f"client auth failed: {real_ip} mountpoint={mountpoint}")
-                    return
-                    
-                agent = Agent(reader, writer, mountpoint, "client", real_ip, username=username)
-                agent.set_caster(self)
-                self.clients[mountpoint].append(agent)
-                writer.write(b"HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n")
-                await writer.drain()
-                await self.handle_client_conn(agent)
+                await self._handle_http_request(reader, writer, first_line_str, real_ip)
             else:
                 writer.write(b"HTTP/1.0 400 Bad Request\r\n\r\n")
                 await writer.drain()
@@ -334,6 +260,103 @@ class NtripCaster:
         except Exception as e:
             self.logger.error(f"connection error from {real_ip}: {e}")
             writer.close()
+
+    async def _handle_source_handshake(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                                     first_line: str, real_ip: str) -> None:
+        parts = first_line.split()
+        if len(parts) < 3:
+            await self._send_error(writer, b"HTTP/1.0 400 Bad Request\r\n\r\n")
+            return
+
+        _, password_val, mountpoint_val = parts[:3]
+        if not self.authenticate_source(password_val, mountpoint_val):
+            self.logger.warning(f"source auth failed: {real_ip} mountpoint={mountpoint_val}")
+            await self._send_error(writer, b"HTTP/1.0 403 Forbidden\r\n\r\n")
+            return
+
+        agent = Agent(reader, writer, mountpoint_val, "source", real_ip)
+        agent.set_caster(self)
+        self.sources[mountpoint_val] = agent
+        
+        writer.write(b"HTTP/1.0 200 OK\r\n\r\n")
+        await writer.drain()
+        await self.handle_source(agent)
+
+    async def _handle_http_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                                 first_line: str, real_ip: str) -> None:
+        parts = first_line.split()
+        if len(parts) < 2:
+             await self._send_error(writer, b"HTTP/1.0 400 Bad Request\r\n\r\n")
+             return
+        
+        request_path = parts[1]
+        
+        if request_path == "/" or request_path == "":
+            await self._serve_source_table(writer)
+            return
+
+        mountpoint = request_path.lstrip("/")
+        headers = await self._parse_headers(reader)
+        
+        await self._authenticate_and_connect_client(reader, writer, mountpoint, headers, real_ip)
+
+    async def _serve_source_table(self, writer: asyncio.StreamWriter) -> None:
+        source_table = self.get_source_table_data()
+        now_str = time.strftime("%a, %d %b %Y %H:%M:%S GMT", time.gmtime())
+        header = (f"SOURCETABLE 200 OK\r\n"
+                  f"Server: NtripCaster/Py/0.1\r\n"
+                  f"Date: {now_str}\r\n"
+                  f"Content-Type: text/plain\r\n"
+                  f"Content-Length: {len(source_table)}\r\n"
+                  f"Connection: close\r\n\r\n")
+        
+        writer.write(header.encode("utf-8") + source_table)
+        await writer.drain()
+        writer.close()
+        await writer.wait_closed()
+
+    async def _parse_headers(self, reader: asyncio.StreamReader) -> dict[str, str]:
+        headers = {}
+        while True:
+            line = await reader.readline()
+            if not line or line == b"\r\n":
+                break
+            line_str = line.decode("utf-8", errors="replace").strip()
+            if ":" in line_str:
+                key, val = line_str.split(":", 1)
+                headers[key.lower()] = val.strip()
+        return headers
+
+    async def _authenticate_and_connect_client(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
+                                             mountpoint: str, headers: dict[str, str], real_ip: str) -> None:
+        username = ""
+        auth_header = headers.get("authorization", "")
+        
+        if auth_header.startswith("Basic "):
+            try:
+                decoded = base64.b64decode(auth_header[6:]).decode("utf-8")
+                if ":" in decoded:
+                    username, _ = decoded.split(":", 1)
+            except Exception:
+                pass # Username remains empty
+                
+        if not auth_header or not self.authenticate_client(auth_header, mountpoint):
+            self.logger.warning(f"client auth failed: {real_ip} mountpoint={mountpoint}")
+            await self._send_error(writer, b'HTTP/1.0 401 Unauthorized\r\nWWW-Authenticate: Basic realm="NTRIP"\r\n\r\n')
+            return
+
+        agent = Agent(reader, writer, mountpoint, "client", real_ip, username=username)
+        agent.set_caster(self)
+        self.clients[mountpoint].append(agent)
+        
+        writer.write(b"HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n")
+        await writer.drain()
+        await self.handle_client_conn(agent)
+
+    async def _send_error(self, writer: asyncio.StreamWriter, message: bytes) -> None:
+        writer.write(message)
+        await writer.drain()
+        writer.close()
 
     async def start_server(self) -> None:
         try:
