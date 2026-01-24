@@ -13,8 +13,7 @@ h11==0.14.0
 idna==3.10
 markdown-it-py==3.0.0
 mdurl==0.1.2
-# Editable Git install with no remote (ntrx==0.1.0)
--e /home/ndjuric/works/genesys/ntripcaster_py
+-e git+ssh://git@github.com/ndjuric/ntrx.git@639c6865e993cb14e9b435cb9aff3f607cdc3b5a#egg=ntrx
 paho-mqtt==2.1.0
 pillow==11.1.0
 pycparser==2.22
