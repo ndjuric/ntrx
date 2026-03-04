@@ -13,6 +13,7 @@ class FS:
         self.logs_folder = os.path.join(self.storage_folder, "logs")
         self.ntripcaster_log_file = os.path.join(self.logs_folder, "ntripcaster.log")
         self.ntripcaster_config_file = os.path.join(self.storage_folder, "ntripcaster.json")
+        self.docker_compose_file = os.path.join(self.project_root, "docker-compose.yml")
 
         self.log_max_size_mb = int(os.getenv("LOG_MAX_SIZE_MB", 1))
         self.log_max_backup_count = int(os.getenv("LOG_MAX_BACKUP_COUNT", 5))

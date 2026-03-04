@@ -7,6 +7,7 @@ import json
 import base64
 import signal
 import asyncio
+import traceback
 from collections import defaultdict
 from typing import Optional
 from redis.asyncio import Redis
@@ -366,7 +367,29 @@ class NtripCaster:
                 redis_url = f"redis://:{redis_password}@{redis_host}:6379"
             else:
                 redis_url = f"redis://{redis_host}:6379"
-            self.redis = Redis.from_url(redis_url, decode_responses=True)
+
+            try:
+                self.redis = Redis.from_url(redis_url, decode_responses=True)
+                await self.redis.ping()
+                self.logger.info(f"Connected to Redis at {redis_host}:6379")
+            except Exception as e:
+                tb = traceback.format_exc()
+                for handler in self.logger.handlers + self.logger.parent.handlers:
+                    if hasattr(handler, 'baseFilename'):
+                        handler.emit(self.logger.makeRecord(
+                            self.logger.name, 40, __file__, 0,
+                            f"Failed to connect to Redis at {redis_host}:6379: {e}\n{tb}",
+                            (), None,
+                        ))
+                        break
+                print(f"\n[ntrx] Redis server not found at {redis_host}:6379")
+                print("[ntrx] The caster will run in degraded mode (no live state, no control channel).")
+                if os.path.exists(self.fs.docker_compose_file):
+                    print("[ntrx] docker-compose.yml detected — try: docker-compose up -d")
+                else:
+                    print("[ntrx] Install and start Redis, or provide a docker-compose.yml in the project root.")
+                print()
+                self.redis = None
 
             listen_addr = self.config.get("listen_addr", "0.0.0.0")
             listen_port = self.config.get("listen_port", 2101)
@@ -374,7 +397,7 @@ class NtripCaster:
             server = await asyncio.start_server(self.handle_connection, listen_addr, listen_port)
             addr = server.sockets[0].getsockname()
             self.logger.info(f"NTRIP caster listening on {addr}")
-            
+
             # Start Redis Control Listener
             asyncio.create_task(self.start_control_listener())
 

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 import asyncio
 import json
 import os
+import traceback
 import uvicorn
 from redis.asyncio import Redis
 
@@ -23,7 +24,6 @@ class FastAPIServer:
 
     @asynccontextmanager
     async def lifespan(self, app: FastAPI):
-        # ... (keep existing)
         redis_host = os.getenv("REDIS_HOST", "127.0.0.1")
         redis_password = os.getenv("REDIS_PASSWORD", "")
         if redis_password:
@@ -33,7 +33,30 @@ class FastAPIServer:
 
         try:
             self.redis = Redis.from_url(redis_url, decode_responses=True)
+            await self.redis.ping()
+            self.logger.info(f"Connected to Redis at {redis_host}:6379")
             app.state.redis_client = self.redis
+        except Exception as e:
+            tb = traceback.format_exc()
+            for handler in self.logger.handlers + self.logger.parent.handlers:
+                if hasattr(handler, 'baseFilename'):
+                    handler.emit(self.logger.makeRecord(
+                        self.logger.name, 40, __file__, 0,
+                        f"Failed to connect to Redis at {redis_host}:6379: {e}\n{tb}",
+                        (), None,
+                    ))
+                    break
+            print(f"\n[ntrx] Redis server not found at {redis_host}:6379")
+            print("[ntrx] The API will run in degraded mode (Redis-dependent endpoints will return errors).")
+            if os.path.exists(self.fs.docker_compose_file):
+                print("[ntrx] docker-compose.yml detected — try: docker-compose up -d")
+            else:
+                print("[ntrx] Install and start Redis, or provide a docker-compose.yml in the project root.")
+            print()
+            self.redis = None
+            app.state.redis_client = None
+
+        try:
             yield
         finally:
             if self.redis:
