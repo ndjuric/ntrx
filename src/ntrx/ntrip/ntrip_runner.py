@@ -29,7 +29,7 @@ class NtripRunner:
     def run(self) -> None:
         try:
             self.loop.run_until_complete(self.caster.start_server())
-        except (KeyboardInterrupt, SystemExit):
+        except (KeyboardInterrupt, SystemExit, RuntimeError):
             pass
         finally:
             self.loop.close()
