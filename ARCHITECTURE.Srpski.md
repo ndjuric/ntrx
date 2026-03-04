@@ -2,7 +2,7 @@
 
 ## Pregled
 
-NTRX je asinhroni NTRIP Caster visokih performansi napisan u Python-u. Koristi Redis za komunikaciju između procesa (IPC), omogućavajući stateless, skalabilnu arhitekturu koja razdvaja osnovnu Caster logiku od API i Control slojeva.
+NTRX je asinhroni NTRIP Caster visokih performansi napisan u Python-u. Koristi Redis za komunikaciju između procesa (IPC), omogućavajući funkcionalnosti poput strimovanja pozicija u realnom vremenu, daljinske kontrole sesija (kill switch) i deljenja stanja. Jezgro NTRIP Caster-a (konekcije izvora/klijenata i prenos podataka) radi nezavisno od Redis-a; kad Redis nije dostupan, sistem radi u degradiranom modu sa isključenim IPC funkcijama.
 
 ## Dizajn Visokog Nivoa (High-Level Design)
 
@@ -74,7 +74,7 @@ Sistem koristi Redis kao centralni nervni sistem za stanje i kontrolu.
 ## Zavisnosti i Zahtevi
 
 *   **Python 3.12+**: Oslanja se na moderni `asyncio`.
-*   **Redis**: Neophodan za IPC. Sistem ne može da funkcioniše bez njega.
+*   **Redis**: Neophodan za punu funkcionalnost sistema (IPC, kontrolni kanal, strimovanje pozicija, deljeno stanje). NTRIP Caster sam po sebi može da radi bez Redis-a u degradiranom modu — prenos podataka između izvora i klijenata funkcioniše, ali objavljivanje stanja, strimovanje pozicija i kill switch neće biti dostupni.
 *   **FastAPI**: Koristi se za kontrolni API.
 *   **Uvicorn**: ASGI Server za FastAPI.
 
@@ -85,6 +85,16 @@ Sistem koristi Redis kao centralni nervni sistem za stanje i kontrolu.
 *   **Horizontalno Skaliranje**: 
     *   **API**: Stateless, skalira se neograničeno.
     *   **Caster**: Stanje konekcije izvora je lokalno. Za >10k korisnika, potrebno je šardovanje po mountpoint-u ili custom redis-backed sloj za deljenje izvora.
+
+## Operativni Modovi (Planirano)
+
+| Mod | Skladištenje Stanja | Redis | Horizontalno Skaliranje |
+|-----|-------------------|-------|-----------------------|
+| **Standalone** *(trenutni)* | U memoriji | Opcionalan (samo IPC) | Samo API |
+| **Thin Client** *(planirano)* | Redis | Obavezan | Potpuno (Caster + API) |
+
+*   **Standalone**: Mountpoint-ovi i stanje konekcija se čuvaju u memoriji. Redis se koristi samo za IPC (pozicije, kontrola, stanje). Ako Redis nije dostupan, caster radi u degradiranom modu.
+*   **Thin Client**: Kompletno stanje je eksternalizovano u Redis. Caster postaje stateless, što omogućava više instanci caster-a iza load balancer-a sa deljenim registrom mountpoint-ova.
 
 ## Vodič za Implementaciju Korisničkog Interfejsa (UI)
 

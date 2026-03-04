@@ -33,7 +33,7 @@ Posetite [ARCHITECTURE.Srpski.md](ARCHITECTURE.Srpski.md) za detaljne dijagrame 
 ### 1. Preduslovi
 
 - Python 3.12+
-- Redis Server (lokalni ili udaljeni)
+- Redis Server (opcionalno — potreban za stanje uživo, strimovanje pozicija i kill switch)
 
 ### 2. Instalacija
 
@@ -62,7 +62,7 @@ Izmenite `storage/ntripcaster.json` da biste definisali kredencijale za Izvore (
 
 ### 4. Pokretanje Sistema
 
-Potrebno je pokrenuti Redis, Caster i API.
+Za punu funkcionalnost (stanje uživo, strimovanje pozicija, kill switch), pokrenite Redis uz Caster i API. Caster i API mogu da rade i bez Redis-a u degradiranom modu — osnovni NTRIP prenos podataka će raditi normalno.
 
 **Opcija A: Pojedinačni Procesi**
 

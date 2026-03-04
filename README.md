@@ -33,7 +33,7 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for detailed diagrams and schema informat
 ### 1. Prerequisites
 
 - Python 3.12+
-- Redis Server (local or remote)
+- Redis Server (optional — required for live state, position streaming, and kill switch)
 
 ### 2. Installation
 
@@ -62,7 +62,7 @@ Edit `storage/ntripcaster.json` to define your Source and Client credentials.
 
 ### 4. Running the System
 
-You need to run Redis, the Caster, and the API.
+For full functionality (live state, position streaming, kill switch), run Redis alongside the Caster and API. The Caster and API can also run without Redis in degraded mode — core NTRIP data relay will work normally.
 
 **Option A: Individual Processes**
 

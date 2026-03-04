@@ -2,7 +2,7 @@
 
 ## Overview
 
-NTRX is a high-performance, asynchronous NTRIP Caster written in Python. It leverages Redis for Inter-Process Communication (IPC), allowing for a stateless, scalable architecture that separates the core Caster logic from the API and Control layers.
+NTRX is a high-performance, asynchronous NTRIP Caster written in Python. It leverages Redis for Inter-Process Communication (IPC), enabling features such as live position streaming, remote session control (kill switch), and shared state publishing. The core NTRIP Caster (source/client connections and data relay) operates independently of Redis; when Redis is unavailable, the system runs in degraded mode with IPC features disabled.
 
 ## High-Level Design
 
@@ -74,7 +74,7 @@ The system uses Redis as the central nervous system for state and control.
 ## Dependencies & Requirements
 
 *   **Python 3.12+**: Relies on modern `asyncio`.
-*   **Redis**: Essential for IPC. System cannot function without it.
+*   **Redis**: Required for full system functionality (IPC, control channel, position streaming, shared state). The NTRIP Caster itself can run without Redis in degraded mode — core data relay between sources and clients works, but live state publishing, position streaming, and the kill switch will be unavailable.
 *   **FastAPI**: Used for the control API.
 *   **Uvicorn**: ASGI Server for FastAPI.
 
@@ -85,6 +85,16 @@ The system uses Redis as the central nervous system for state and control.
 *   **Horizontal Scaling**: 
     *   **API**: Stateless, scales indefinitely.
     *   **Caster**: Sources connection state is local. For >10k users, sharding by mountpoint or a custom redis-backed source sharing layer is needed.
+
+## Operational Modes (Planned)
+
+| Mode | State Storage | Redis | Horizontal Scaling |
+|------|--------------|-------|--------------------|}
+| **Standalone** *(current)* | In-memory | Optional (IPC only) | API only |
+| **Thin Client** *(planned)* | Redis | Required | Full (Caster + API) |
+
+*   **Standalone**: Mountpoints and connection state are held in-memory. Redis is used only for IPC (positions, control, state). If Redis is unavailable, the caster runs in degraded mode.
+*   **Thin Client**: All state is externalized to Redis. The caster becomes stateless, enabling multiple caster instances behind a load balancer with shared mountpoint registry.
 
 ## User Interface Implementation Guide
 
