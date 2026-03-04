@@ -76,6 +76,12 @@ You need to run Redis, the Caster, and the API.
 python -m ntrx --help
 ```
 
+> **Note**: Redis is **optional**. If Redis is not running, the caster and API will start in **degraded mode** — core NTRIP functionality works, but live state publishing, position streaming, and the control channel (kill switch) will be disabled. The program automatically detects `docker-compose.yml` in the project root and suggests `docker-compose up -d` if Redis is unreachable.
+
+> **TODO – Operational Modes**: Two modes are planned:
+> 1. **Standalone** *(current)* – mountpoints and state are kept in-memory; Redis is optional (IPC only).
+> 2. **Thin Client** – mountpoints and all state are stored in Redis; the caster becomes stateless, enabling horizontal scaling behind a load balancer.
+
 ---
 
 ## 📡 API Endpoints

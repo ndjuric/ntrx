@@ -76,6 +76,12 @@ Potrebno je pokrenuti Redis, Caster i API.
 python -m ntrx --help
 ```
 
+> **Napomena**: Redis je **opcioni**. Ako Redis nije pokrenut, caster i API će se pokrenuti u **degradiranom modu** — osnovna NTRIP funkcionalnost radi, ali objavljivanje stanja u realnom vremenu, strimovanje pozicija i kontrolni kanal (kill switch) neće biti dostupni. Program automatski detektuje `docker-compose.yml` u korenom direktorijumu i predlaže `docker-compose up -d` ako Redis nije dostupan.
+
+> **TODO – Operativni Modovi**: Dva moda su planirana:
+> 1. **Standalone** *(trenutni)* – mountpoint-ovi i stanje se čuvaju u memoriji; Redis je opcionalan (samo za IPC).
+> 2. **Thin Client** – mountpoint-ovi i kompletno stanje se čuvaju u Redis-u; caster postaje stateless, što omogućava horizontalno skaliranje iza load balancer-a.
+
 ---
 
 ## 📡 API Krajnje Tačke (Endpoints)
