@@ -8,8 +8,8 @@ NTRIP caster visokih performansi, zasnovan na asinhronom Python-u i Redis-u, koj
 ## 🚀 Ključne Funkcionalnosti
 
 - **Redis-Native Arhitektura**: Koristi Redis Pub/Sub za komunikaciju između procesa (IPC).
-  - **Live Slanje Pozicija**: Klijentske NMEA pozicije se šalju u Redis (`ntrip:positions`) u realnom vremenu.
-  - **Kill Switch**: Administratorska kontrola aktivanog diskonektovanja korisnika putem Redis-a (`ntrip:control`).
+  - **Live Slanje Pozicija**: Klijentske NMEA pozicije se šalju u Redis (`ntripcaster:positions`) u realnom vremenu.
+  - **Kill Switch**: Administratorska kontrola aktivanog diskonektovanja korisnika putem Redis-a (`ntripcaster:control`).
 - **Moderna Python Implementacija**:
   - Izgrađen na **Python 3.12+**, **FastAPI** i **AsyncIO** tehnologijama.
   - **Stroga Tipizacija**: Koristi **Pydantic** modele za svu razmenu podataka i upravljanje stanjem.
@@ -68,7 +68,7 @@ Za punu funkcionalnost (stanje uživo, strimovanje pozicija, kill switch), pokre
 
 1. Pokrenite Redis: `docker-compose up -d`
 2. Pokrenite API: `python -m ntrx api`
-3. Pokrenite Caster: `python -m ntrx ntrip`
+3. Pokrenite Caster: `python -m ntrx ntripcaster`
 
 **Opcija B: CLI Pomoćni Alat**
 

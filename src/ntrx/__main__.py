@@ -6,7 +6,7 @@ class NtrxCLI:
         self.app = typer.Typer(help="ntrx CLI – Precision Streaming Infrastructure")
 
         # register subcommands
-        self.app.command("ntrip")(self.run_ntrip)
+        self.app.command("ntripcaster")(self.run_ntripcaster)
         self.app.command("api")(self.run_api)
 
         # callback for default behavior
@@ -14,14 +14,19 @@ class NtrxCLI:
         def main_callback(ctx: typer.Context):
             if ctx.invoked_subcommand is None:
                 typer.echo("Welcome to ntrx CLI 🛰️\n")
+                typer.echo("Because of the `project.scripts` block in `pyproject.toml`,")
+                typer.echo("installing this package (e.g., `pip install -e .`) automatically")
+                typer.echo("creates a bin/exe wrapper called `ntrx`. So you can just type:\n")
+                typer.echo("  • ntrx COMMAND             # via pip/setuptools entry point")
+                typer.echo("  • python -m ntrx COMMAND   # as a python module\n")
                 typer.echo("Available commands:")
-                typer.echo("  • python -m ntrx ntrip     → run NTRIP caster server")
-                typer.echo("  • python -m ntrx api       → run FastAPI WebSocket API")
+                typer.echo("  • ntrx ntripcaster     → run NTRIP caster server")
+                typer.echo("  • ntrx api       → run FastAPI WebSocket API")
                 typer.echo("\nUse --help for more options.")
                 raise typer.Exit()
 
-    def run_ntrip(self):
-        from ntrx.ntrip.ntrip_runner import NtripRunner
+    def run_ntripcaster(self):
+        from ntrx.ntripcaster.ntripcaster_runner import NtripRunner
         NtripRunner().run()
 
     def run_api(self):

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import asyncio
 from ntrx.vfs.fs import FS
-from ntrx.ntrip.ntrip_caster import NtripCaster
+from ntrx.ntripcaster.ntripcaster import NtripCaster
 import signal
 from ntrx.logger.logger_setup import LoggerSetup
 

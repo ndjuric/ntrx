@@ -105,7 +105,7 @@ class NtripIntegrationTester:
                 decode_responses=True
             )
             pubsub = r.pubsub()
-            pubsub.subscribe("ntrip:positions")
+            pubsub.subscribe("ntripcaster:positions")
             
             start_time = time.time()
             while time.time() - start_time < 10:

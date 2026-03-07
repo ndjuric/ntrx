@@ -14,7 +14,7 @@ from redis.asyncio import Redis
 
 from ntrx.vfs.fs import FS
 from ntrx.logger.logger_setup import LoggerSetup
-from ntrx.ntrip.agent import Agent
+from ntrx.ntripcaster.agent import Agent
 from ntrx.models.position import ClientPosition
 from ntrx.models.control import ControlCommand
 from ntrx.models.caster_state import CasterState
@@ -124,7 +124,7 @@ class NtripCaster:
 
     async def start_control_listener(self) -> None:
         """
-        Listens to Redis 'ntrip:control' channel for administrative commands.
+        Listens to Redis 'ntripcaster:control' channel for administrative commands.
         Example: {"action": "kill", "username": "user1"}
         """
         if not self.redis:
@@ -132,8 +132,8 @@ class NtripCaster:
             return
 
         pubsub = self.redis.pubsub()
-        await pubsub.subscribe("ntrip:control")
-        self.logger.info("Subscribed to Redis channel 'ntrip:control'")
+        await pubsub.subscribe("ntripcaster:control")
+        self.logger.info("Subscribed to Redis channel 'ntripcaster:control'")
 
         try:
             async for message in pubsub.listen():
@@ -190,7 +190,7 @@ class NtripCaster:
                 nmea=line.decode("utf-8", errors="replace"),
                 timestamp=time.time()
             )
-            await self.redis.publish("ntrip:positions", pos.model_dump_json())
+            await self.redis.publish("ntripcaster:positions", pos.model_dump_json())
         except Exception as e:
             self.logger.error(f"Failed to publish position for {username}: {e}")
 

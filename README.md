@@ -8,8 +8,8 @@ A high-performance, asynchronous, Redis-native NTRIP caster written in Python us
 ## 🚀 Key Features
 
 - **Redis-Native Architecture**: Uses Redis Pub/Sub for Inter-Process Communication (IPC).
-  - **Live Position Streaming**: Client NMEA positions are streamed to Redis (`ntrip:positions`).
-  - **Kill Switch**: Admin control via Redis (`ntrip:control`) to actively disconnect users.
+  - **Live Position Streaming**: Client NMEA positions are streamed to Redis (`ntripcaster:positions`).
+  - **Kill Switch**: Admin control via Redis (`ntripcaster:control`) to actively disconnect users.
 - **Modern Python Implementation**:
   - Built with **Python 3.12+**, **FastAPI**, and **AsyncIO**.
   - **Strict Typing**: Uses **Pydantic** models for all data exchange and state management.
@@ -68,7 +68,7 @@ For full functionality (live state, position streaming, kill switch), run Redis 
 
 1. Start Redis: `docker-compose up -d`
 2. Start API: `python -m ntrx api`
-3. Start Caster: `python -m ntrx ntrip`
+3. Start Caster: `python -m ntrx ntripcaster`
 
 **Option B: CLI Helper**
 

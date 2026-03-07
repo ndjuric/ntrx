@@ -62,8 +62,8 @@ The system uses Redis as the central nervous system for state and control.
 
 | Channel Name      | Publisher | Subscriber | Payload (JSON)                                      | Description |
 |-------------------|-----------|------------|---------------------------------------------------|-------------|
-| `ntrip:positions` | Caster    | Consumers  | `{"username": "u1", "nmea": "$..", "ts": 123.4}` | Live stream of client positions (NMEA GPGGA). |
-| `ntrip:control`   | API       | Caster     | `{"action": "kill", "username": "u1"}`            | Control commands to manage active sessions. |
+| `ntripcaster:positions` | Caster    | Consumers  | `{"username": "u1", "nmea": "$..", "ts": 123.4}` | Live stream of client positions (NMEA GPGGA). |
+| `ntripcaster:control`   | API       | Caster     | `{"action": "kill", "username": "u1"}`            | Control commands to manage active sessions. |
 
 ### Keys (State)
 
@@ -101,7 +101,7 @@ The system uses Redis as the central nervous system for state and control.
 To build a UI (similar to legacy admin panels):
 
 1.  **Map View**:
-    *   Connect to a WebSocket endpoint (to be implemented in FastAPI) that bridges `ntrip:positions`.
+    *   Connect to a WebSocket endpoint (to be implemented in FastAPI) that bridges `ntripcaster:positions`.
     *   Overlay markers on a map (Leaflet/Google Maps) based on the stream.
 2.  **Dashboard**:
     *   Poll `GET /state` for a list of active sources and clients.
@@ -116,7 +116,7 @@ To build a UI (similar to legacy admin panels):
 | :--- | :--- | :--- |
 | **Source Table** | Static file or memory struct | Dynamic generation from active memory |
 | **Client Auth** | Flat file / MySQL | JSON Config (Extensible to DB) |
-| **Kill Switch** | Watch file `/mnt/ramdisk/kill/` | Redis Channel `ntrip:control` |
-| **Map Data** | Write to file `/var/www/data/` | Redis Channel `ntrip:positions` |
+| **Kill Switch** | Watch file `/mnt/ramdisk/kill/` | Redis Channel `ntripcaster:control` |
+| **Map Data** | Write to file `/var/www/data/` | Redis Channel `ntripcaster:positions` |
 
 This architecture ensures exact functional equivalence for the end-user while modernizing the backend for reliability.

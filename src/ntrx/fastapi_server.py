@@ -82,7 +82,7 @@ class FastAPIServer:
                     raise HTTPException(status_code=503, detail="Redis unavailable")
                 
                 cmd = ControlCommand(action="kill", username=username)
-                await self.app.state.redis_client.publish("ntrip:control", cmd.model_dump_json())
+                await self.app.state.redis_client.publish("ntripcaster:control", cmd.model_dump_json())
                 return {"status": "ok", "message": f"Kill signal sent for {username}"}
             except Exception as e:
                 self.logger.error(f"Kill API error: {e}")

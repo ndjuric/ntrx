@@ -62,8 +62,8 @@ Sistem koristi Redis kao centralni nervni sistem za stanje i kontrolu.
 
 | Ime Kanala        | Izdavač (Pub) | Pretplatnik (Sub) | Payload (JSON)                                    | Opis |
 |-------------------|---------------|-------------------|---------------------------------------------------|------|
-| `ntrip:positions` | Caster        | Konzumenti        | `{"username": "u1", "nmea": "$..", "ts": 123.4}` | Live stream pozicija klijenata (NMEA GPGGA). |
-| `ntrip:control`   | API           | Caster            | `{"action": "kill", "username": "u1"}`            | Kontrolne komande za upravljanje sesijama. |
+| `ntripcaster:positions` | Caster        | Konzumenti        | `{"username": "u1", "nmea": "$..", "ts": 123.4}` | Live stream pozicija klijenata (NMEA GPGGA). |
+| `ntripcaster:control`   | API           | Caster            | `{"action": "kill", "username": "u1"}`            | Kontrolne komande za upravljanje sesijama. |
 
 ### Ključevi (Stanje)
 
@@ -101,7 +101,7 @@ Sistem koristi Redis kao centralni nervni sistem za stanje i kontrolu.
 Za izgradnju UI (sličnog starim admin panelima):
 
 1.  **Pregled Mape (Map View)**:
-    *   Povežite se na WebSocket endpoint (treba da se implementira u FastAPI) koji premošćava `ntrip:positions`.
+    *   Povežite se na WebSocket endpoint (treba da se implementira u FastAPI) koji premošćava `ntripcaster:positions`.
     *   Crtajte markere na mapi (Leaflet/Google Maps) na osnovu stream-a.
 2.  **Dashboard**:
     *   Anketirajte (Poll) `GET /state` za listu aktivnih izvora i klijenata.
@@ -116,7 +116,7 @@ Za izgradnju UI (sličnog starim admin panelima):
 | :--- | :--- | :--- |
 | **Source Table** | Statički fajl ili memory struct | Dinamičko generisanje iz aktivne memorije |
 | **Autentifikacija** | Flat fajl / MySQL | JSON Konfiguracija (Proširivo na DB) |
-| **Kill Switch** | Watch fajl `/mnt/ramdisk/kill/` | Redis Kanal `ntrip:control` |
-| **Map Data** | Upis u fajl `/var/www/data/` | Redis Kanal `ntrip:positions` |
+| **Kill Switch** | Watch fajl `/mnt/ramdisk/kill/` | Redis Kanal `ntripcaster:control` |
+| **Map Data** | Upis u fajl `/var/www/data/` | Redis Kanal `ntripcaster:positions` |
 
 Ova arhitektura osigurava tačnu funkcionalnu ekvivalentnost za krajnjeg korisnika, dok modernizuje backend radi pouzdanosti.
