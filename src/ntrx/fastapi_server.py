@@ -15,9 +15,10 @@ from ntrx.models.control import ControlCommand
 
 
 class FastAPIServer:
+    logger = LoggerSetup.get_logger(__qualname__)
+
     def __init__(self):
         self.fs = FS()
-        self.logger = LoggerSetup.get_logger(__name__)
         self.redis: Redis | None = None
         self.app = FastAPI(lifespan=self.lifespan)
         self.setup_routes()

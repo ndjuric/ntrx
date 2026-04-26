@@ -6,12 +6,13 @@ import signal
 from ntrx.logger.logger_setup import LoggerSetup
 
 class NtripRunner:
+    logger = LoggerSetup.get_logger(__qualname__)
+
     def __init__(self):
-        self.logger = LoggerSetup.get_logger(__name__)
         self.logger.info("Initializing NTRIP server...")
         self.fs = FS()
         self.fs.ensure_directories()
-        self.caster = NtripCaster(self.fs.ntripcaster_config_file)
+        self.caster = NtripCaster(self.fs, self.fs.ntripcaster_config_file)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.setup_signal_handlers()

@@ -22,9 +22,10 @@ from ntrx.models.agent_data import AgentData
 
 
 class NtripCaster:
-    def __init__(self, config_file: str):
-        self.fs = FS()
-        self.logger = LoggerSetup.get_logger(__name__)
+    logger = LoggerSetup.get_logger(__qualname__)
+
+    def __init__(self, fs: FS, config_file: str):
+        self.fs = fs
         self.config = self._load_config(config_file)
         self.sources: dict[str, Agent] = {}
         self.clients: defaultdict[str, list[Agent]] = defaultdict(list)
