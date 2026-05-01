@@ -12,7 +12,6 @@ from collections import defaultdict
 from typing import Optional
 from redis.asyncio import Redis
 
-from ntrx.vfs.fs import FS
 from ntrx.logger.logger_setup import LoggerSetup
 from ntrx.ntripcaster.agent import Agent
 from ntrx.models.position import ClientPosition
@@ -24,16 +23,12 @@ from ntrx.models.agent_data import AgentData
 class NtripCaster:
     logger = LoggerSetup.get_logger(__qualname__)
 
-    def __init__(self, fs: FS, config_file: str):
-        self.fs = fs
-        self.config = self._load_config(config_file)
+    def __init__(self, config: dict, has_docker_compose: bool = False):
+        self.config = config
+        self.has_docker_compose = has_docker_compose
         self.sources: dict[str, Agent] = {}
         self.clients: defaultdict[str, list[Agent]] = defaultdict(list)
         self.redis: Optional[Redis] = None
-
-    def _load_config(self, config_file: str) -> dict:
-        with open(config_file, "r") as f:
-            return json.load(f)
 
     def authenticate_source(self, username: str, mountpoint: str) -> bool:
         allowed = self.config["tokens_source"].get(username)
@@ -385,7 +380,7 @@ class NtripCaster:
                         break
                 print(f"\n[ntrx] Redis server not found at {redis_host}:6379")
                 print("[ntrx] The caster will run in degraded mode (no live state, no control channel).")
-                if os.path.exists(self.fs.docker_compose_file):
+                if self.has_docker_compose:
                     print("[ntrx] docker-compose.yml detected — try: docker-compose up -d")
                 else:
                     print("[ntrx] Install and start Redis, or provide a docker-compose.yml in the project root.")

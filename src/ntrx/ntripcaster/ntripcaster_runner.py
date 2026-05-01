@@ -12,7 +12,19 @@ class NtripRunner:
         self.logger.info("Initializing NTRIP server...")
         self.fs = FS()
         self.fs.ensure_directories()
-        self.caster = NtripCaster(self.fs, self.fs.ntripcaster_config_file)
+        
+        try:
+            import json
+            with open(self.fs.ntripcaster_config_file, "r") as f:
+                config_data = json.load(f)
+        except Exception as e:
+            self.logger.error(f"Failed to load config: {e}")
+            config_data = {}
+            
+        import os
+        has_docker = os.path.exists(self.fs.docker_compose_file)
+        
+        self.caster = NtripCaster(config=config_data, has_docker_compose=has_docker)
         self.loop = asyncio.new_event_loop()
         asyncio.set_event_loop(self.loop)
         self.setup_signal_handlers()
