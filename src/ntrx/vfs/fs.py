@@ -8,14 +8,16 @@ from dotenv import load_dotenv
 class FS:
     def __init__(self):
         # 0. Load environment variables from .env if found in CWD or parents
-        # This populates os.environ so os.getenv("NTRX_ROOT") works in _determine_root
-        load_dotenv(override=True)
+        # We explicitly search from CWD upwards, NOT from __file__, because
+        # __file__ might be inside a virtual environment (e.g. venv/src/ntrx/).
+        env_path = self._find_env_from_cwd()
+        if env_path:
+            load_dotenv(env_path, override=True)
 
         # 1. Determine the root directory using a priority system
         self.project_root = self._determine_root()
 
         # 2. Re-load environment variables from the specific project root if needed
-        # (Usually redundant but ensures we use the correct file for this instance)
         self.env_file = os.path.join(self.project_root, ".env")
         if os.path.exists(self.env_file):
             load_dotenv(self.env_file, override=True)
@@ -38,6 +40,15 @@ class FS:
         self.ensure_directories()
         self.ensure_default_config()
 
+    def _find_env_from_cwd(self) -> str | None:
+        """Finds .env starting from CWD and moving upwards."""
+        curr = Path.cwd()
+        for p in [curr] + list(curr.parents):
+            env_file = p / ".env"
+            if env_file.exists():
+                return str(env_file)
+        return None
+
     def _determine_root(self) -> str:
         """Determines the root path for configs and storage."""
         # 1. Check if NTRX_ROOT is already in environment (e.g. set in shell)
@@ -54,7 +65,8 @@ class FS:
         # src/ntrx/vfs/fs.py -> parents[3] is the project root
         try:
             root_candidate = Path(__file__).resolve().parents[3]
-            if (root_candidate / "src").exists():
+            # Ensure we are not returning a path inside a virtual environment
+            if (root_candidate / "src").exists() and "venv" not in root_candidate.parts and ".venv" not in root_candidate.parts:
                 return str(root_candidate)
         except (IndexError, ValueError):
             pass
