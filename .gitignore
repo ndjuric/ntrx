@@ -119,3 +119,6 @@ __hack/
 *.ini
 *.conf
 nginx/
+# Archives
+/storage/archives/*
+!/storage/archives/.gitkeep
