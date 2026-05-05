@@ -7,6 +7,7 @@ class NtrxCLI:
 
         # register subcommands
         self.app.command("ntripcaster")(self.run_ntripcaster)
+        self.app.command("ntripclient")(self.run_ntripclient)
         self.app.command("api")(self.run_api)
 
         # callback for default behavior
@@ -21,6 +22,7 @@ class NtrxCLI:
                 typer.echo("  • python -m ntrx COMMAND   # as a python module\n")
                 typer.echo("Available commands:")
                 typer.echo("  • ntrx ntripcaster     → run NTRIP caster server")
+                typer.echo("  • ntrx ntripclient     → run NTRIP client (RTCM injection)")
                 typer.echo("  • ntrx api       → run FastAPI WebSocket API")
                 typer.echo("\nUse --help for more options.")
                 raise typer.Exit()
@@ -28,6 +30,10 @@ class NtrxCLI:
     def run_ntripcaster(self):
         from ntrx.ntripcaster.ntripcaster_runner import NtripRunner
         NtripRunner().run()
+
+    def run_ntripclient(self):
+        from ntrx.ntripclient.client_runner import ClientRunner
+        ClientRunner().run()
 
     def run_api(self):
         from ntrx.fastapi_server import FastAPIServer

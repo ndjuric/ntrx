@@ -7,7 +7,7 @@ name = "ntrx"
 version = "0.1.0"
 description = "NTRIP caster reimplementation"
 authors = [{ name="ndjuric", email="metod303@gmail.com" }]
-dependencies = ["redis", "python-dotenv"]
+dependencies = ["redis", "python-dotenv", "pyserial-asyncio"]
 
 [tool.setuptools]
 package-dir = {"" = "src"}
