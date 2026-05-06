@@ -122,3 +122,7 @@ nginx/
 # Archives
 /storage/archives/*
 !/storage/archives/.gitkeep
+
+# Logs
+/storage/logs/*
+!/storage/logs/.gitkeep
