@@ -33,7 +33,6 @@ class NtripRunner:
         self.caster.logger.info("shutting down server...")
         for task in asyncio.all_tasks(self.loop):
             task.cancel()
-        self.loop.stop()
 
     def setup_signal_handlers(self) -> None:
         for sig in (signal.SIGINT, signal.SIGTERM):
@@ -42,9 +41,17 @@ class NtripRunner:
     def run(self) -> None:
         try:
             self.loop.run_until_complete(self.caster.start_server())
+        except asyncio.CancelledError:
+            pass
         except (KeyboardInterrupt, SystemExit, RuntimeError):
             pass
         finally:
+            pending = asyncio.all_tasks(self.loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                self.loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+                
             self.loop.close()
             self.caster.logger.info("server shut down successfully")
 

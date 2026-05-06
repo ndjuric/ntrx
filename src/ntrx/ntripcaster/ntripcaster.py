@@ -54,6 +54,8 @@ class NtripCaster:
             try:
                 state = self.get_state()
                 await self.redis.set('ntripcaster_state', state.model_dump_json())
+            except asyncio.CancelledError:
+                pass
             except Exception as e:
                 self.logger.error(f"Failed to publish state to Redis: {e}")
 
@@ -90,14 +92,19 @@ class NtripCaster:
                         to_remove.append(client)
                 for client in to_remove:
                     self.clients[agent.mountpoint].remove(client)
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             self.logger.error(f"Source loop error: {e}")
         finally:
             self.logger.info(f"source closed: {agent.mountpoint}")
             if agent.mountpoint in self.sources:
                 del self.sources[agent.mountpoint]
-            agent.writer.close()
-            await agent.writer.wait_closed()
+            try:
+                agent.writer.close()
+                await agent.writer.wait_closed()
+            except Exception:
+                pass
             await self.publish_state()
 
     def get_source_table_data(self) -> bytes:
@@ -154,10 +161,15 @@ class NtripCaster:
                     self.logger.error(f"Invalid JSON in control message: {message['data']}")
                 except Exception as e:
                     self.logger.error(f"Error processing control message: {e}")
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             self.logger.error(f"Control listener error: {e}")
         finally:
-            await pubsub.close()
+            try:
+                await pubsub.close()
+            except Exception:
+                pass
 
     async def _kill_user(self, username: str) -> None:
         """Disconnects all clients with the specified username."""
@@ -223,6 +235,8 @@ class NtripCaster:
                     except Exception:
                          # Source might be dead
                          pass
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             self.logger.error(f"Client loop error: {e}")
         finally:
@@ -230,8 +244,11 @@ class NtripCaster:
             if agent.mountpoint in self.clients and agent in self.clients[agent.mountpoint]:
                 self.clients[agent.mountpoint].remove(agent)
             
-            agent.writer.close()
-            await agent.writer.wait_closed()
+            try:
+                agent.writer.close()
+                await agent.writer.wait_closed()
+            except Exception:
+                pass
             await self.publish_state()
 
     async def handle_connection(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -254,9 +271,14 @@ class NtripCaster:
                 writer.write(b"HTTP/1.0 400 Bad Request\r\n\r\n")
                 await writer.drain()
                 writer.close()
+        except asyncio.CancelledError:
+            pass
         except Exception as e:
             self.logger.error(f"connection error from {real_ip}: {e}")
-            writer.close()
+            try:
+                writer.close()
+            except Exception:
+                pass
 
     async def _handle_source_handshake(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
                                      first_line: str, real_ip: str) -> None:
@@ -277,7 +299,7 @@ class NtripCaster:
         
         writer.write(b"HTTP/1.0 200 OK\r\n\r\n")
         await writer.drain()
-        await self.handle_source(agent)
+        asyncio.create_task(self.handle_source(agent))
 
     async def _handle_http_request(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter,
                                  first_line: str, real_ip: str) -> None:
@@ -348,7 +370,7 @@ class NtripCaster:
         
         writer.write(b"HTTP/1.0 200 OK\r\nContent-Type: application/octet-stream\r\n\r\n")
         await writer.drain()
-        await self.handle_client_conn(agent)
+        asyncio.create_task(self.handle_client_conn(agent))
 
     async def _send_error(self, writer: asyncio.StreamWriter, message: bytes) -> None:
         writer.write(message)
